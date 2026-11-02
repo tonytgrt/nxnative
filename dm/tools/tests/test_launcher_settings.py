@@ -64,9 +64,15 @@ class LauncherSettingsTests(unittest.TestCase):
         self.assertEqual(build(BOTW, 'nvn', 'ios').keys(), ios.keys())   # ios when unset
         self.assertEqual(set(ios) - set(mac), {'DM_SHOW_FPS', 'DM_TOUCH_HAPTICS'})
         self.assertIn('DM_RUMBLE', mac); self.assertIn('DM_METAL_HUD', mac)
-        self.assertEqual(set(mac) - set(ios), {'DM_FULLSCREEN'})   # the Mac window's Display mode (front_mac.m reads 1 or 0)
+        self.assertEqual(set(mac) - set(ios), {'DM_FULLSCREEN', 'DM_MOUSE', 'DM_MOUSE_SENS', 'DM_MOUSE_INVERT'})   # Display mode and mouse look (front_mac.m)
         s = mac['DM_FULLSCREEN']
         self.assertEqual((s['kind'], s['default'], s['options'], s['level']), ('choice', '0', [['0', 'Window'], ['1', 'Fullscreen']], 'basic'))
+
+    def test_mouse_look_follows_the_3d_gamepad(self):   # DM_GAME_MOUSE_LOOK: on where the iPhone gamepad starts in 3D (pad_layout full), the touchscreen elsewhere
+        botw, wonder = build(BOTW, 'nvn', 'mac'), build(WONDER, 'nvn', 'mac')
+        self.assertEqual((botw['DM_MOUSE']['on'], botw['DM_MOUSE']['off']), ('look', 'touch'))
+        self.assertEqual((botw['DM_MOUSE']['default'], wonder['DM_MOUSE']['default']), ('look', 'touch'))
+        self.assertEqual((botw['DM_MOUSE_SENS']['needs'], botw['DM_MOUSE_INVERT']['needs']), ('DM_MOUSE=look', 'DM_MOUSE=look'))
 
     def test_defaults_follow_each_platform_host(self):
         # nvn_mtl.m pso4_on: Mac defaults on, iOS follows the profile. nvn_rec.h rec_on: iOS on, Mac off.

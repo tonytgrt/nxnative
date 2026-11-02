@@ -30,6 +30,7 @@ struct LauncherView: View {
             .padding([.horizontal, .top], 20)
             Form {
                 settingSections(basic: true)
+                KeyboardMouseSection()
                 CloudSavesSection()
                 Section {
                     DisclosureGroup("Advanced settings", isExpanded: $advanced) {}
@@ -115,6 +116,141 @@ struct CloudSavesSection: View {
     static func shown(_ path: String) -> String {
         guard path == drive || path.hasPrefix(drive + "/") else { return path }
         return (["iCloud Drive"] + path.dropFirst(drive.count).split(separator: "/").map(String.init)).joined(separator: " › ")
+    }
+}
+
+/// Keyboard and mouse: the layout of dm/host/keymap_mac.h (the host's own table, through swiftc -import-objc-header), each Switch control with two inputs. A slot clicked waits for
+/// the next key, or for a mouse button clicked on that slot (KeyRecorder); a click anywhere else stops waiting, and the × beside a slot clears it. Kept in this app's preferences
+/// as keyboard.layout, only the controls that differ from the default (DM_KEYMAP's form), which launcher.c puts into DM_KEYMAP; a DM_KEYMAP an env file or the launch environment set
+/// wins, and is shown here. Mouse look and its sensitivity are rows of the settings list (DM_MOUSE, DM_MOUSE_SENS, DM_MOUSE_INVERT)
+struct KeyboardMouseSection: View {
+    @AppStorage("keyboard.layout") private var spec = ""
+    @AppStorage("window.keyboard") private var expanded = true
+    @StateObject private var rec = KeyRecorder()
+    private let fixed: String? = {
+        let env = ProcessInfo.processInfo.environment
+        let keys = ((env["DM_ENV_FILE_KEYS"] ?? "") + " " + (env["DM_ENV_LAUNCH_KEYS"] ?? "")).split(separator: " ")
+        return keys.contains("DM_KEYMAP") || env["DM_KEYMAP"] != nil ? env["DM_KEYMAP"] ?? "" : nil
+    }()
+
+    static let count = Int(km_target_count())
+    static let slots = Int(KM_SLOTS)
+    static let defaults = layout("")
+    static func text(_ p: UnsafePointer<CChar>?) -> String { p.map { String(cString: $0) } ?? "" }
+    static func layout(_ spec: String) -> [[Int]] { (0..<count).map { t in (0..<slots).map { Int(km_slot(spec, Int32(t), Int32($0))) } } }
+    static func spec(of l: [[Int]]) -> String {   // the controls that differ from the default
+        (0..<count).compactMap { t in
+            l[t] == defaults[t] ? nil : text(km_target_id(Int32(t))) + "=" + l[t].filter { $0 >= 0 }.map { text(km_input_name(Int32($0))) }.joined(separator: " ")
+        }.joined(separator: ";")
+    }
+    private var groups: [String] {
+        (0..<Self.count).map { Self.text(km_target_group(Int32($0))) }.reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
+    }
+
+    var body: some View {
+        let current = Self.layout(fixed ?? spec)
+        Section {
+            DisclosureGroup("Keyboard and mouse", isExpanded: $expanded) {}
+                .onChange(of: expanded) { rec.stop() }
+                .onDisappear { rec.stop() }
+        } footer: {
+            Text(fixed != nil ? "Set by DM_KEYMAP (env.txt or the launch environment)." :
+                 "Click a slot, then press a key, or click the slot with a mouse button. With Mouse look on, click the game to steer the camera with the mouse; ⌘ gives the pointer back.")
+        }
+        if expanded {
+            ForEach(groups, id: \.self) { g in
+                Section(g) {
+                    ForEach((0..<Self.count).filter { Self.text(km_target_group(Int32($0))) == g }, id: \.self) { t in
+                        LabeledContent(Self.text(km_target_label(Int32(t)))) {
+                            HStack(spacing: 4) { ForEach(0..<Self.slots, id: \.self) { s in slot(t, s, current[t][s]) } }
+                        }
+                    }
+                }
+            }
+            if fixed == nil {
+                Section {
+                    Button("Reset keyboard and mouse") { rec.stop(); spec = "" }.disabled(spec.isEmpty)
+                }
+            }
+        }
+    }
+
+    private func slot(_ t: Int, _ s: Int, _ input: Int) -> some View {
+        let id = KeyRecorder.Slot(target: t, slot: s), waiting = rec.listening == id
+        return HStack(spacing: 2) {
+            SlotButton(title: waiting ? "Press a key…" : input >= 0 ? Self.text(km_input_label(Int32(input))) : "–", waiting: waiting, rec: rec, slot: id) { bind(t, s, $0) }
+                .frame(width: 112)
+            Button { bind(t, s, -1) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
+                .buttonStyle(.borderless).help("Clear").opacity(input >= 0 ? 1 : 0).disabled(input < 0)   // a click on it also ends any wait (KeyRecorder)
+        }
+        .disabled(fixed != nil)
+    }
+
+    private func bind(_ t: Int, _ s: Int, _ input: Int) {   // an input moves to its new control, as the host's layout takes it (km_bind)
+        var l = Self.layout(spec)
+        if input >= 0 { for u in l.indices { for k in l[u].indices where l[u][k] == input { l[u][k] = -1 } } }
+        l[t][s] = input
+        spec = Self.spec(of: l)
+    }
+}
+
+/// Waits for the input of one slot: an event monitor sees keys before the window's key equivalents (Return would press Play) and mouse buttons before any control. A key binds,
+/// unless it is a ⌘ shortcut (⌘ cannot be bound, and ⌘W or ⌘Q still work); a mouse button binds when it is clicked on the waiting slot, and a click anywhere else ends the wait
+final class KeyRecorder: ObservableObject {
+    struct Slot: Hashable { let target, slot: Int }
+    @Published private(set) var listening: Slot?
+    private var monitor: Any?, take: ((Int) -> Void)?
+    private weak var view: NSView?
+
+    func start(_ s: Slot, view: NSView, take: @escaping (Int) -> Void) {
+        stop()
+        listening = s; self.view = view; self.take = take
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] e in self?.handle(e) ?? e }
+    }
+    func stop() {
+        if let m = monitor { NSEvent.removeMonitor(m) }
+        monitor = nil; listening = nil; take = nil; view = nil
+    }
+    private func bind(_ input: Int) { let f = take; stop(); f?(input) }
+    private func handle(_ e: NSEvent) -> NSEvent? {
+        switch e.type {
+        case .keyDown:
+            if e.modifierFlags.contains(.command) { stop(); return e }
+            let input = Int(km_input_from_key(e.keyCode))
+            if input >= 0 { bind(input) } else { NSSound.beep() }   // Caps Lock, Fn and keys with no name in the layout
+            return nil
+        case .flagsChanged:
+            let bit = km_modifier_bit(e.keyCode)
+            if bit != 0 && e.modifierFlags.rawValue & UInt(bit) != 0 { bind(Int(km_input_from_key(e.keyCode))) }
+            return e
+        default:
+            guard let v = view, v.window === e.window, v.bounds.contains(v.convert(e.locationInWindow, from: nil)) else { stop(); return e }
+            bind(Int(km_input_from_mouse(e.buttonNumber)))
+            return nil
+        }
+    }
+}
+
+/// One slot: a push button (AppKit's, so the recorder can tell a click on it from one elsewhere) that starts the wait
+struct SlotButton: NSViewRepresentable {
+    let title: String, waiting: Bool, rec: KeyRecorder, slot: KeyRecorder.Slot
+    let take: (Int) -> Void
+
+    func makeNSView(context: Context) -> NSButton {
+        let b = NSButton(title: title, target: context.coordinator, action: #selector(Coordinator.click(_:)))
+        b.bezelStyle = .rounded; b.lineBreakMode = .byTruncatingTail
+        b.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return b
+    }
+    func updateNSView(_ b: NSButton, context: Context) {
+        context.coordinator.parent = self
+        b.title = title; b.bezelColor = waiting ? .controlAccentColor : nil; b.isEnabled = context.environment.isEnabled
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    final class Coordinator: NSObject {
+        var parent: SlotButton
+        init(_ p: SlotButton) { parent = p }
+        @objc func click(_ b: NSButton) { parent.rec.start(parent.slot, view: b, take: parent.take) }
     }
 }
 

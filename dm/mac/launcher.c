@@ -146,6 +146,18 @@ static void cloud_saves_folder(void) {
     if (v) CFRelease(v);
 }
 
+// The keyboard and mouse layout changed in the settings window (Launcher.swift KeyboardMouseSection, keyboard.layout in the app's preferences: the controls that differ from the default,
+// in DM_KEYMAP's form, dm/host/keymap_mac.h) becomes DM_KEYMAP, with or without the window; a DM_KEYMAP the launch environment or an env file set wins
+static void keyboard_layout(void) {
+    CFStringRef domain = CFBundleGetIdentifier(CFBundleGetMainBundle());
+    if (getenv("DM_KEYMAP") || !domain) return;
+    CFPropertyListRef v = CFPreferencesCopyAppValue(CFSTR("keyboard.layout"), domain); char s[4096];
+    if (v && CFGetTypeID(v) == CFStringGetTypeID() && CFStringGetCString(v, s, sizeof s, kCFStringEncodingUTF8) && *s) {
+        setenv("DM_KEYMAP", s, 1); fprintf(stderr, "launcher: keyboard and mouse layout DM_KEYMAP=%s\n", s);
+    }
+    if (v) CFRelease(v);
+}
+
 int main(int argc, char **argv) {
     char self[PATH_MAX], exe[PATH_MAX]; uint32_t n = sizeof self;
     if (_NSGetExecutablePath(self, &n) || !realpath(self, exe)) return 1;
@@ -191,6 +203,7 @@ int main(int argc, char **argv) {
     if (!shown) return 0;   // Quit: no game
     if (shown == 2) saved_choices();
     cloud_saves_folder();
+    keyboard_layout();
     setenv("DM_ROOT", sup, 0); setenv("DM_ROMFS", romfs, 0); setenv("DM_SAVE", save, 0); setenv("DM_TEMP", temp, 0);
     snprintf(p, sizeof p, "%s/msl", res); setenv("DM_MSL_DIR", p, 0);
     snprintf(p, sizeof p, "%s/font", dm); setenv("DM_FONT_DIR", p, 0);

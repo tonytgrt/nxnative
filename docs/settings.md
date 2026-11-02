@@ -4,9 +4,9 @@ The screen before the game starts shows the settings the game supports. A settin
 
 - [Tested defaults](#tested-defaults)
 - [Game](#game): [Frame rate](#frame-rate), [Render scale](#render-scale), [Console mode](#console-mode), [Upscaling](#upscaling), [Game language](#game-language), [Frame-rate counter](#frame-rate-counter)
-- [Controls](#controls): [Touch feedback](#touch-feedback), [Game rumble](#game-rumble), [Rumble strength](#rumble-strength), [Rumble cutoff](#rumble-cutoff)
+- [Controls](#controls): [Touch feedback](#touch-feedback), [Mouse look](#mouse-look), [Mouse sensitivity](#mouse-sensitivity), [Invert mouse up and down](#invert-mouse-up-and-down), [Game rumble](#game-rumble), [Rumble strength](#rumble-strength), [Rumble cutoff](#rumble-cutoff)
 - [Performance](#performance): [Frame buffering](#frame-buffering), [Metal 4 pipelines](#metal-4-pipelines), [Pipeline prebuild](#pipeline-prebuild), [Encode thread](#encode-thread), [Hold frames when late](#hold-frames-when-late), [Performance HUD](#performance-hud), [Reset to tested defaults](#reset-to-tested-defaults)
-- [The Mac settings window](#the-mac-settings-window): [Display mode](#display-mode)
+- [The Mac settings window](#the-mac-settings-window): [Display mode](#display-mode), [Keyboard and mouse](#keyboard-and-mouse)
 - [TV](#tv)
 - [Settings in a file](#settings-in-a-file)
 
@@ -64,6 +64,18 @@ Shows the frames per second at the top left.
 ### Touch feedback
 
 A light tap from the phone when you press an on-screen button.
+
+### Mouse look
+
+On the Mac: click the game to hand it the mouse. The pointer disappears, moving the mouse turns the camera (the right stick), and the mouse buttons are the game buttons the [keyboard and mouse layout](#keyboard-and-mouse) gives them (left click Y, right click ZR, middle click ZL). Press ⌘ to get the pointer back; switching to another app, or a text box the game opens, gives it back too. Off, the left mouse button is the Switch's touchscreen. On by default for games whose iPhone gamepad starts in the 3D layout (Breath of the Wild, Tears of the Kingdom), off for the others.
+
+### Mouse sensitivity
+
+How far the camera turns for a given mouse movement, from 25 to 300 %. The mouse holds the right stick as far as it moves in a moment, so the game's own camera speed limits a fast flick. With mouse look on.
+
+### Invert mouse up and down
+
+Moving the mouse forward turns the camera down. With mouse look on.
 
 ### Game rumble
 
@@ -183,7 +195,7 @@ Sets every setting back to the game's tested default; **Play** then forgets your
 
 ## The Mac settings window
 
-A Mac app ([A Mac app](development.md#a-mac-app)) shows its settings in a window before the game starts. They are the same settings as on the iPhone, with the same defaults. The window shows the most used ones first: **Frame rate**, **Render scale**, **Console mode**, **Game language**, **Display mode** and **Game rumble**, when the game has them. **Render scale** shows the picture's size in pixels beside the percentage for the chosen **Console mode**, when the game's profile has it (Breath of the Wild: 1600 × 900 docked, 1280 × 720 handheld at 100 %). The others are under **Advanced settings**, in the usual sections, with **Reset to tested defaults**. The window remembers whether Advanced settings is open. **Frame-rate counter** and **Touch feedback** are only on the iPhone.
+A Mac app ([A Mac app](development.md#a-mac-app)) shows its settings in a window before the game starts. They are the same settings as on the iPhone, with the same defaults. The window shows the most used ones first: **Frame rate**, **Render scale**, **Console mode**, **Game language**, **Display mode**, **Mouse look** and **Game rumble**, when the game has them, then the [Keyboard and mouse](#keyboard-and-mouse) layout. **Render scale** shows the picture's size in pixels beside the percentage for the chosen **Console mode**, when the game's profile has it (Breath of the Wild: 1600 × 900 docked, 1280 × 720 handheld at 100 %). The others are under **Advanced settings**, in the usual sections, with **Reset to tested defaults**. The window remembers whether Advanced settings is open. **Frame-rate counter** and **Touch feedback** are only on the iPhone.
 
 Click **Play** (or press Return) to start the game. **Quit**, ⌘Q or closing the window ends the app without the game. The app remembers your choices for that game, and a game started without the window, from a front end or with the window turned off, uses them too ([Saved choices](frontends.md#saved-choices)). A setting fixed by an `env.txt` or by the program that started the app is shown greyed out.
 
@@ -192,6 +204,26 @@ Turn off **Show this window at launch** to start the game at once with your choi
 ### Display mode
 
 **Window** or **Fullscreen**: how the game's window opens. ⌃⌘F or the green button changes it while you play. In an `env.txt`: `DM_FULLSCREEN=1` or `0`.
+
+### Keyboard and mouse
+
+Every Switch control with the two keys or mouse buttons that press it, by group: **Buttons**, **Left stick**, **Right stick**, **D-pad** and **Other** (**Walk** pushes the left stick half way while held, for games that walk below a full push; **Shake the controller**). Click a slot, then press a key, or click the same slot with the mouse button you want; a click anywhere else stops waiting. A key already used elsewhere moves to the new slot. The × beside a slot clears it, and **Reset keyboard and mouse** brings back the default. ⌘ cannot be bound: the menus and giving back the pointer use it.
+
+The default is a PC game's layout:
+
+| Control | Keys |
+|---|---|
+| Left stick | W A S D |
+| Right stick | the mouse ([Mouse look](#mouse-look)), I J K L |
+| A / B / X / Y | F / Left Shift / Space / left click |
+| L / R | Tab / E |
+| ZL / ZR | Q or middle click / right click |
+| + / − | Esc or Return / M or Delete |
+| Left / right stick press | C or Left Control / V |
+| D-pad | arrow keys, or 1 (up), 2 (right), 3 (down), 4 (left) |
+| Walk / Shake | Left Option / G |
+
+The keys are read by position, so the layout is the same with any keyboard language. In an `env.txt`: `DM_KEYMAP=<control>=<input> <input>;…`, each entry replacing that control's keys (`DM_KEYMAP=a=e;r=q;zl=mouse3` presses A with E, R with Q, ZL with middle click; `r=` leaves R unpressable). The names are those of [dm/host/keymap_mac.h](../dm/host/keymap_mac.h): controls such as `a`, `zl`, `plus`, `lup`, `dright`, `walk`; keys such as `f`, `space`, `lshift`, `escape`, `up`, `f1`, `kp0`; mouse buttons `mouse1` (left) to `mouse8`. The window shows a layout from an `env.txt` greyed out.
 
 ### Cloud saves folder
 
@@ -223,6 +255,10 @@ A line like `DM_PRESENT_SNAP=0` in `Documents/env.txt` (in the Files app, under 
 | Game language | `DM_LANG` | a language code, such as `ja` |
 | Display mode (Mac) | `DM_FULLSCREEN` | `1` fullscreen, `0` a window |
 | Cloud saves folder (Mac) | `DM_SAVE_SYNC` | a folder; `icloud`: iCloud Drive › nxnative Saves; `0`: off |
+| Keyboard and mouse (Mac) | `DM_KEYMAP` | `<control>=<input> <input>;…` ([Keyboard and mouse](#keyboard-and-mouse)) |
+| Mouse look (Mac) | `DM_MOUSE` | `look`, `touch` |
+| Mouse sensitivity (Mac) | `DM_MOUSE_SENS` | `0.25` to `3` |
+| Invert mouse up and down (Mac) | `DM_MOUSE_INVERT` | `1`, `0` |
 | Frame-rate counter | `DM_SHOW_FPS` | `1`, `0` |
 | Touch feedback | `DM_TOUCH_HAPTICS` | `1`, `0` |
 | Game rumble | `DM_RUMBLE` | `1`, `0` |
